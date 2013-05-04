@@ -1,6 +1,8 @@
 package com.gmail.nossr50.datatypes.player;
 
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -13,6 +15,7 @@ import com.gmail.nossr50.config.spout.SpoutConfig;
 import com.gmail.nossr50.datatypes.MobHealthbarType;
 import com.gmail.nossr50.datatypes.skills.AbilityType;
 import com.gmail.nossr50.datatypes.skills.SkillType;
+import com.gmail.nossr50.datatypes.skills.SkillXpGain;
 import com.gmail.nossr50.datatypes.spout.huds.HudType;
 import com.gmail.nossr50.datatypes.spout.huds.McMMOHud;
 import com.gmail.nossr50.skills.child.FamilyTree;
@@ -33,7 +36,8 @@ public class PlayerProfile {
     private final Map<AbilityType, Integer> skillsDATS = new HashMap<AbilityType, Integer>(); // Ability & Cooldown
 
     // Store previous XP gains for deminished returns
-    private Map<SkillType, Float> gainedSkillsXp = new HashMap<SkillType, Float>();
+    private HashMap<SkillType, LinkedList<SkillXpGain>> gainedSkillsXp = new HashMap<SkillType, LinkedList<SkillXpGain>>();
+    private HashMap<SkillType, Float> rollingSkillsXp = new HashMap<SkillType, Float>();
 
     public PlayerProfile(String playerName, boolean addNew) {
         this.playerName = playerName;
@@ -246,25 +250,14 @@ public class PlayerProfile {
     public float getRegisteredXpGain(SkillType skillType) {
         float xp;
         
-        if (gainedSkillsXp.get(skillType) == null) {
+        if (rollingSkillsXp.get(skillType) == null) {
             xp = 0F;
         }
         else {
-             xp = gainedSkillsXp.get(skillType);
+            xp = rollingSkillsXp.get(skillType);
         }
 
         return xp;
-    }
-
-    /**
-     * Set registered experience gains
-     * This is used for diminished XP returns
-     *
-     * @param skillType Skill being used
-     * @param xp Experience amount to set
-     */
-    public void setRegisteredXpGain(SkillType skillType, float xp) {
-        gainedSkillsXp.put(skillType, xp);
     }
 
     /**
@@ -275,7 +268,42 @@ public class PlayerProfile {
      * @param xp Experience amount to add
      */
     public void registeredXpGain(SkillType skillType, float xp) {
-        gainedSkillsXp.put(skillType, getRegisteredXpGain(skillType) + xp);
+        LinkedList<SkillXpGain> gains = gainedSkillsXp.get(skillType);
+
+        if(gains == null) {
+            gains = new LinkedList<SkillXpGain>(); // Maybe add an initial capacity?
+        }
+        gains.addLast(new SkillXpGain(System.currentTimeMillis(), xp));
+
+        gainedSkillsXp.put(skillType, gains);
+        rollingSkillsXp.put(skillType, getRegisteredXpGain(skillType) + xp);
+    }
+
+    /**
+     * Remove experience gains older than a given time
+     * This is used for diminished XP returns
+     *
+     * @param age Age in milliseconds that gains older than should be removed
+     */
+    public void removeXpGainsOlderThan(long age) {
+        long now = System.currentTimeMillis();
+
+        Iterator<LinkedList<SkillXpGain>> iterator = gainedSkillsXp.values().iterator();
+        while(iterator.hasNext()) {
+            LinkedList<SkillXpGain> skillGains = iterator.next();
+
+            // Because we are using a LinkedList and addLast ordering is guaranteed, so we loop through and remove things that are too old, and stop immediately once we find a young'n
+            Iterator<SkillXpGain> gainsIterator = skillGains.iterator();
+            while(gainsIterator.hasNext()) {
+                SkillXpGain gain = gainsIterator.next();
+
+                if(now - gain.getTime() >= age) {
+                    gainsIterator.remove();
+                } else {
+                    break;
+                }
+            }
+        }
     }
 
     /**
