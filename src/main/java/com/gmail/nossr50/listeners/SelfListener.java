@@ -42,7 +42,7 @@ public class SelfListener implements Listener {
             return; // Dim. returns is turned off
         }
 
-        final int rawXp = event.getRawXpGained();
+        final float rawXp = event.getRawXpGained();
         if (rawXp < 0) {
             return; // Don't calculate for XP subtraction
         }
